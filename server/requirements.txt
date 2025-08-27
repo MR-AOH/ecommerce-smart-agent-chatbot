@@ -1,0 +1,23 @@
+# FastAPI and web server dependencies
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Environment variables
+python-dotenv
+
+# Database dependencies
+motor # Async MongoDB driver
+pymongo # MongoDB driver
+
+# LangChain dependencies
+langchain
+langchain-core
+langchain-google-genai
+langchain-mongodb
+langgraph-checkpoint-mongodb
+langgraph
+
+# Data validation and processing
+pydantic
+typing-extensions
