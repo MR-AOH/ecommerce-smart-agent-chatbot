@@ -63,7 +63,7 @@ Before we start, make sure you have:
 
 **📦 Required Software**
 - [Node.js & npm](https://nodejs.org/) (v18+)
-- Git
+- Python 3.11
 
 </td>
 <td>
@@ -129,32 +129,6 @@ uvicorn main:app --reload
 ```
 
 Your AI agent is now running on `http://localhost:8000` 🎉
-
----
-
-## 🧪 Testing Your AI Agent
-
-### 💬 **Start a New Conversation**
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"message": "Do you have any dining tables?"}' \
-  http://localhost:8000/chat
-```
-
-**Response:**
-```json
-{
-  "threadId": "1703123456789",
-  "response": "Yes! I found several dining tables in our inventory. Here's what we have available..."
-}
-```
-
-### 🔄 **Continue the Conversation**
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"message": "What about the price range?"}' \
-  http://localhost:8000/chat/1703123456789
-```
 
 ---
 
