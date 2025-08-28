@@ -3,7 +3,7 @@
 <div align="center">
 
 ![AI Agent](https://img.shields.io/badge/AI-Agent-blue?style=for-the-badge&logo=openai)
-![LangGraph](https://img.shields.io/badge/LangGraph-JS-green?style=for-the-badge)
+![LangGraph](https://img.shields.io/badge/LangGraph-Python-blue?style=for-the-badge&logo=python)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green?style=for-the-badge&logo=mongodb)
 ![React](https://img.shields.io/badge/React-Frontend-blue?style=for-the-badge&logo=react)
 
