@@ -20,6 +20,10 @@ In this tutorial, we'll create a sophisticated **AI Agent** using an **agentic a
 - 🔄 **Adapts**: Falls back to alternative search strategies when needed
 - 💭 **Remembers**: Maintains conversation context across interactions
 
+
+<img width="1786" height="987" alt="Screenshot 2025-08-28 at 3 16 22 PM" src="https://github.com/user-attachments/assets/2f974229-ae3e-4a33-aebe-13215094005c" />
+
+
 ---
 
 ## 📚 What You'll Learn
