@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Sequence
 from dataclasses import dataclass
-from pymongo import MongoClient
+
 # LangChain imports
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -80,7 +80,7 @@ async def retry_with_backoff(func, max_retries: int = 3):
     raise Exception("Max retries exceeded")  # This should never be reached
 
 # Main function that creates and runs the AI agent
-async def call_agent(client: AsyncIOMotorClient, query: str, thread_id: str) -> str:
+async def call_agent(mongo_client: AsyncIOMotorClient, query: str, thread_id: str) -> str:
     """
     Main agent function that processes user queries using LangGraph workflow
     
@@ -94,9 +94,9 @@ async def call_agent(client: AsyncIOMotorClient, query: str, thread_id: str) -> 
     """
     try:
         # Database configuration
-        db_name = "inventory_database"        # Name of the MongoDB database
-        db = client[db_name]                  # Get database instance
-        collection = db["items"]              # Get the 'items' collection
+        db_name = "inventory_database"               # Name of the MongoDB database
+        db = mongo_client[db_name]                   # Get database instance
+        collection = db["items"]                     # Get the 'items' collection
 
         # Create a custom tool for searching furniture inventory
         @tool("item_lookup", args_schema=ItemLookupInput)
@@ -138,72 +138,97 @@ async def call_agent(client: AsyncIOMotorClient, query: str, thread_id: str) -> 
                 logger.info(f"Sample documents: {sample_docs}")
 
                 # Configuration for MongoDB Atlas Vector Search
-                db_config = {
-                    "collection": collection,           # MongoDB collection to search
-                    "index_name": "vector_index",       # Name of the vector search index
-                    "text_key": "embedding_text",       # Field containing the text used for embeddings
-                    "embedding_key": "embedding",       # Field containing the vector embeddings
-                }
-
-                # Create vector store instance for semantic search using Google Gemini embeddings
-                vector_store = MongoDBAtlasVectorSearch(
-                    embedding=GoogleGenerativeAIEmbeddings(
-                        google_api_key=os.getenv("GOOGLE_API_KEY"),  # Google API key from environment
-                        model="text-embedding-004",                   # Gemini embedding model
-                    ),
-                    **db_config
-                )
-
-                logger.info("Performing vector search...")
-                # Perform semantic search using vector embeddings
                 try:
-                    result = await vector_store.asimilarity_search_with_score(query, k=n)
-                    logger.info(f"Vector search returned {len(result)} results")
-                except Exception as vector_error:
-                    logger.warning(f"Vector search failed: {vector_error}")
-                    result = []
-                
-                # If vector search returns no results, fall back to text search
-                if len(result) == 0:
-                    logger.info("Vector search returned no results, trying text search...")
-                    # MongoDB text search using regular expressions
-                    text_results = []
-                    async for doc in collection.find({
-                        "$or": [  # OR condition - match any of these fields
-                            {"item_name": {"$regex": query, "$options": "i"}},        # Case-insensitive search in item name
-                            {"item_description": {"$regex": query, "$options": "i"}}, # Case-insensitive search in description
-                            {"categories": {"$regex": query, "$options": "i"}},       # Case-insensitive search in categories
-                            {"embedding_text": {"$regex": query, "$options": "i"}}    # Case-insensitive search in embedding text
-                        ]
-                    }).limit(n):
+                    # Try to perform vector search
+                    logger.info("Performing vector search...")
+                    
+                    # Create embeddings instance
+                    embeddings = GoogleGenerativeAIEmbeddings(
+                        google_api_key=os.getenv("GOOGLE_API_KEY"),
+                        model="text-embedding-004",
+                    )
+                    
+                    # Create query embedding
+                    query_embedding = await embeddings.aembed_query(query)
+                    
+                    # Perform vector search using MongoDB aggregation
+                    vector_search_pipeline = [
+                        {
+                            "$vectorSearch": {
+                                "index": "vector_index",
+                                "path": "embedding",
+                                "queryVector": query_embedding,
+                                "numCandidates": 100,
+                                "limit": n
+                            }
+                        },
+                        {
+                            "$project": {
+                                "_id": 1,
+                                "item_id": 1,
+                                "item_name": 1,
+                                "item_description": 1,
+                                "brand": 1,
+                                "categories": 1,
+                                "prices": 1,
+                                "embedding_text": 1,
+                                "score": {"$meta": "vectorSearchScore"}
+                            }
+                        }
+                    ]
+                    
+                    vector_results = []
+                    cursor = collection.aggregate(vector_search_pipeline)
+                    async for doc in cursor:
                         # Convert ObjectId to string for JSON serialization
                         if '_id' in doc:
                             doc['_id'] = str(doc['_id'])
-                        text_results.append(doc)
+                        vector_results.append(doc)
                     
-                    logger.info(f"Text search returned {len(text_results)} results")
-                    # Return text search results as JSON string
-                    return json.dumps({
-                        "results": text_results,
-                        "searchType": "text",    # Indicate this was a text search
-                        "query": query,
-                        "count": len(text_results)
-                    })
-
-                # Process vector search results
-                processed_results = []
-                for doc, score in result:
-                    doc_dict = doc.dict() if hasattr(doc, 'dict') else {"page_content": str(doc)}
-                    doc_dict['similarity_score'] = float(score)
-                    processed_results.append(doc_dict)
-
-                # Return vector search results as JSON string
+                    logger.info(f"Vector search returned {len(vector_results)} results")
+                    
+                    if len(vector_results) > 0:
+                        # Return vector search results as JSON string
+                        return json.dumps({
+                            "results": vector_results,
+                            "searchType": "vector",
+                            "query": query,
+                            "count": len(vector_results)
+                        })
+                        
+                except Exception as vector_error:
+                    logger.warning(f"Vector search failed: {vector_error}")
+                
+                logger.info("Vector search returned no results or failed, trying text search...")
+                
+                # MongoDB text search using regular expressions
+                text_results = []
+                cursor = collection.find({
+                    "$or": [  # OR condition - match any of these fields
+                        {"item_name": {"$regex": query, "$options": "i"}},        # Case-insensitive search in item name
+                        {"item_description": {"$regex": query, "$options": "i"}}, # Case-insensitive search in description
+                        {"categories": {"$regex": query, "$options": "i"}},       # Case-insensitive search in categories
+                        {"embedding_text": {"$regex": query, "$options": "i"}}    # Case-insensitive search in embedding text
+                    ]
+                }).limit(n)
+                
+                async for doc in cursor:
+                    # Convert ObjectId to string for JSON serialization
+                    if '_id' in doc:
+                        doc['_id'] = str(doc['_id'])
+                    text_results.append(doc)
+                
+                logger.info(f"Text search returned {len(text_results)} results")
+                # Return text search results as JSON string
                 return json.dumps({
-                    "results": processed_results,
-                    "searchType": "vector",   # Indicate this was a vector search
+                    "results": text_results,
+                    "searchType": "text",    # Indicate this was a text search
                     "query": query,
-                    "count": len(processed_results)
+                    "count": len(text_results)
                 })
+
+                # This code block is no longer needed since we removed the vector search results processing
+                # The function will always return either vector results or text results above
                 
             except Exception as error:
                 # Log detailed error information for debugging
@@ -268,14 +293,14 @@ async def call_agent(client: AsyncIOMotorClient, query: str, thread_id: str) -> 
                         "system",  # System message defines the AI's role and behavior
                         f"""You are a helpful E-commerce Chatbot Agent for a furniture store.
 
-    IMPORTANT: You have access to an item_lookup tool that searches the furniture inventory database. ALWAYS use this tool when customers ask about furniture items, even if the tool returns errors or empty results.
+IMPORTANT: You have access to an item_lookup tool that searches the furniture inventory database. ALWAYS use this tool when customers ask about furniture items, even if the tool returns errors or empty results.
 
-    When using the item_lookup tool:
-    - If it returns results, provide helpful details about the furniture items
-    - If it returns an error or no results, acknowledge this and offer to help in other ways
-    - If the database appears to be empty, let the customer know that inventory might be being updated
+When using the item_lookup tool:
+- If it returns results, provide helpful details about the furniture items
+- If it returns an error or no results, acknowledge this and offer to help in other ways
+- If the database appears to be empty, let the customer know that inventory might be being updated
 
-    Current time: {datetime.now().isoformat()}""",
+Current time: {datetime.now().isoformat()}""",
                     ),
                     MessagesPlaceholder("messages"),  # Placeholder for conversation history
                 ])
@@ -300,13 +325,18 @@ async def call_agent(client: AsyncIOMotorClient, query: str, thread_id: str) -> 
         workflow.add_conditional_edges("agent", should_continue)    # Agent decides: tools or end
         workflow.add_edge("tools", "agent")                         # After tools, go back to agent
 
-        # create a sync client for LangGraph checkpoints
-        sync_client = MongoClient(os.getenv("MONGODB_ATLAS_URI"), tlsCAFile=certifi.where())
-
-        checkpointer = MongoDBSaver(
-            client=sync_client,
-            db_name=db_name
-        )
+        # Initialize conversation state persistence
+        try:
+            from langgraph.checkpoint.mongodb import MongoDBSaver
+            checkpointer = MongoDBSaver(
+                client=mongo_client,
+                db_name=db_name
+            )
+        except Exception as checkpoint_error:
+            logger.warning(f"Could not initialize MongoDBSaver: {checkpoint_error}")
+            # Use memory checkpointer as fallback
+            from langgraph.checkpoint.memory import MemorySaver
+            checkpointer = MemorySaver()
         
         # Compile the workflow with state saving
         app = workflow.compile(checkpointer=checkpointer)
