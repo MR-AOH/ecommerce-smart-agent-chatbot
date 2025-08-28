@@ -1,4 +1,4 @@
-# 🛒 E-commerce AI Agent with LangGraph.js & MongoDB
+# 🛒 E-commerce AI Agent with Python LangGraph & MongoDB
 
 <div align="center">
 
