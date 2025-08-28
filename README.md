@@ -1,9 +1,9 @@
-# 🛒 E-commerce AI Agent with LangGraph.js & MongoDB
+# 🛒 E-commerce AI Agent with Python LangGraph & MongoDB
 
 <div align="center">
 
 ![AI Agent](https://img.shields.io/badge/AI-Agent-blue?style=for-the-badge&logo=openai)
-![LangGraph](https://img.shields.io/badge/LangGraph-JS-green?style=for-the-badge)
+![LangGraph](https://img.shields.io/badge/LangGraph-Python-blue?style=for-the-badge&logo=python)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green?style=for-the-badge&logo=mongodb)
 ![React](https://img.shields.io/badge/React-Frontend-blue?style=for-the-badge&logo=react)
 
@@ -19,6 +19,10 @@ In this tutorial, we'll create a sophisticated **AI Agent** using an **agentic a
 - 🔍 **Acts**: Searches real product databases using vector embeddings  
 - 🔄 **Adapts**: Falls back to alternative search strategies when needed
 - 💭 **Remembers**: Maintains conversation context across interactions
+
+
+<img width="1786" height="987" alt="Screenshot 2025-08-28 at 3 16 22 PM" src="https://github.com/user-attachments/assets/2f974229-ae3e-4a33-aebe-13215094005c" />
+
 
 ---
 
@@ -59,7 +63,7 @@ Before we start, make sure you have:
 
 **📦 Required Software**
 - [Node.js & npm](https://nodejs.org/) (v18+)
-- Git
+- Python 3.11
 
 </td>
 <td>
@@ -125,32 +129,6 @@ uvicorn main:app --reload
 ```
 
 Your AI agent is now running on `http://localhost:8000` 🎉
-
----
-
-## 🧪 Testing Your AI Agent
-
-### 💬 **Start a New Conversation**
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"message": "Do you have any dining tables?"}' \
-  http://localhost:8000/chat
-```
-
-**Response:**
-```json
-{
-  "threadId": "1703123456789",
-  "response": "Yes! I found several dining tables in our inventory. Here's what we have available..."
-}
-```
-
-### 🔄 **Continue the Conversation**
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"message": "What about the price range?"}' \
-  http://localhost:8000/chat/1703123456789
-```
 
 ---
 
