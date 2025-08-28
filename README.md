@@ -38,7 +38,7 @@ In this tutorial, we'll create a sophisticated **AI Agent** using an **agentic a
 <td width="50%">
 
 ### 🛠️ **Practical Skills**
-- 🔗 **API Integration** (OpenAI & Gemini)
+- 🔗 **API Integration** (Gemini)
 - ⚛️ **React Frontend Development**
 - 🌐 **RESTful API Design**
 - 📊 **Database Seeding & Management**
@@ -80,12 +80,12 @@ Before we start, make sure you have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/kubowania/ecommerce-chat-helper
-cd ecommerce-chat-helper
+git clone https://github.com/MR-AOH/ecommerce-smart-agent-chatbot
+cd ecommerce-smart-agent-chatbot
 
 # Install server dependencies
 cd server
-npm install
+pip install requirements.txt
 ```
 
 ### 🔧 **Step 2: Environment Setup**
@@ -104,7 +104,8 @@ MONGODB_ATLAS_URI=your_mongodb_atlas_uri_here
 
 ```bash
 # Generate AI-powered synthetic furniture data
-npm run seed
+Run the seed_database.py file:
+python seed_database.py
 ```
 
 <details>
@@ -120,7 +121,7 @@ npm run seed
 ### 🚀 **Step 4: Start the Backend**
 
 ```bash
-npm run dev
+uvicorn main:app --reload
 ```
 
 Your AI agent is now running on `http://localhost:8000` 🎉
@@ -267,7 +268,7 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-**Built with ❤️ by Ania Kubow**
+**Built with ❤️ by Ahsan**
 
 ⭐ **Star this repo if you found it helpful!** ⭐
 
