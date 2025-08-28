@@ -63,8 +63,7 @@ import certifi
 
 client = AsyncIOMotorClient(
     os.getenv("MONGODB_ATLAS_URI"),
-    tlsCAFile=certifi.where(),
-
+    tlsCAFile=certifi.where()
 )
 
 # Initialize Google Gemini chat model for generating synthetic furniture data
@@ -99,35 +98,46 @@ async def create_vector_search_index() -> None:
         db = client["inventory_database"]
         collection = db["items"]
         
-        # Drop existing indexes
-        await collection.drop_indexes()
+        # First, let's check if the index already exists
+        try:
+            indexes = await collection.list_search_indexes().to_list(length=None)
+            existing_index = next((idx for idx in indexes if idx.get("name") == "vector_index"), None)
+            if existing_index:
+                print("Vector search index already exists")
+                return
+        except Exception:
+            # If list_search_indexes doesn't work, continue with creation
+            pass
         
         vector_search_idx = {
             "name": "vector_index",
-            "type": "vectorSearch",
             "definition": {
-                "fields": [
-                    {
-                        "type": "vector",
-                        "path": "embedding",
-                        "numDimensions": 768,
-                        "similarity": "cosine"
+                "mappings": {
+                    "dynamic": True,
+                    "fields": {
+                        "embedding": {
+                            "type": "knnVector",
+                            "dimensions": 768,
+                            "similarity": "cosine"
+                        }
                     }
-                ]
+                }
             }
         }
         
         print("Creating vector search index...")
-        # Note: In Python, we use create_search_index differently
-        # This might need to be adjusted based on your MongoDB setup
         try:
+            # Try to create the search index
             await collection.create_search_index(vector_search_idx)
             print("Successfully created vector search index")
         except Exception as e:
-            print(f"Note: Vector search index creation may require MongoDB Atlas setup: {e}")
+            # If creation fails, it might be because we need Atlas Search setup
+            print(f"Vector search index creation requires MongoDB Atlas Search setup: {e}")
+            print("You can manually create this index in MongoDB Atlas console if needed.")
             
     except Exception as e:
         print(f'Failed to create vector search index: {e}')
+        print("Continuing without vector search index - will use text search fallback")
 
 async def generate_synthetic_data() -> List[Item]:
     """Generate synthetic furniture data using AI"""
@@ -209,45 +219,41 @@ async def seed_database() -> None:
 
         print(f"Generated {len(synthetic_data)} synthetic items")
 
-        # Process each item: create summary and prepare for vector storage
-        records_with_summaries = []
-        for record in synthetic_data:
-            summary = await create_item_summary(record)
-            records_with_summaries.append({
-                "page_content": summary,
-                "metadata": record.dict()
-            })
+        # Process each item: create summary and store in MongoDB
+        from langchain_core.documents import Document
         
-        # Store each record with vector embeddings in MongoDB
-        for i, record in enumerate(records_with_summaries):
+        # Create embeddings instance
+        embeddings = GoogleGenerativeAIEmbeddings(
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            model="text-embedding-004",
+        )
+        
+        # Process and store each record individually
+        for i, record in enumerate(synthetic_data):
             try:
-                print(f"Processing record {i+1}/{len(records_with_summaries)}")
+                print(f"Processing record {i+1}/{len(synthetic_data)}: {record.item_id}")
                 
-                # Convert the record to the format expected by MongoDBAtlasVectorSearch
-                from langchain_core.documents import Document
-                doc = Document(
-                    page_content=record["page_content"],
-                    metadata=record["metadata"]
-                )
+                # Create summary for the item
+                summary = await create_item_summary(record)
                 
-                # Create vector embeddings and store in MongoDB Atlas using Gemini
-                vector_store = MongoDBAtlasVectorSearch.from_documents(
-                    documents=[doc],                                    # Array containing single record
-                    embedding=GoogleGenerativeAIEmbeddings(             # Google embedding model
-                        google_api_key=os.getenv("GOOGLE_API_KEY"),     # Google API key
-                        model="text-embedding-004",                     # Google's standard embedding model (768 dimensions)
-                    ),
-                    collection=collection,                              # MongoDB collection reference
-                    index_name="vector_index",                         # Name of vector search index
-                    text_key="embedding_text",                         # Field name for searchable text
-                    embedding_key="embedding",                         # Field name for vector embeddings
-                )
-
+                # Create embedding for the summary
+                embedding_vector = await embeddings.aembed_query(summary)
+                
+                # Prepare document for MongoDB insertion
+                document = {
+                    "embedding_text": summary,
+                    "embedding": embedding_vector,
+                    **record.model_dump()  # Use model_dump instead of deprecated dict()
+                }
+                
+                # Insert document into MongoDB collection
+                result = await collection.insert_one(document)
+                
                 # Log progress for each successfully processed item
-                print(f"Successfully processed & saved record: {record['metadata']['item_id']}")
+                print(f"Successfully processed & saved record: {record.item_id} (ObjectId: {result.inserted_id})")
                 
             except Exception as record_error:
-                print(f"Error processing record {record['metadata'].get('item_id', 'unknown')}: {record_error}")
+                print(f"Error processing record {record.item_id}: {record_error}")
                 continue
 
         # Log completion of entire seeding process
